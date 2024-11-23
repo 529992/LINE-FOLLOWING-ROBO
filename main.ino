@@ -1,113 +1,80 @@
-// Motor control pins
-int motorA1 = 2;
-int motorA2 = 3;
-int motorB1 = 4;
-int motorB2 = 5;
-int ENA = 9;
-int ENB = 10;
+void calibrateir();  // Declaration of the calibrateIR function
 
-// IR sensor pins
-int ir1 = 6;
-int ir2 = 7;
-int ir3 = 8;  // Center sensor
-int ir4 = A0;
-int ir5 = A1;
+const int PWM1 = 7; // Control pwm for left motor (m1)
+const int IN1 = 1; // Control pin 1 for left motor (m1)
+const int IN2 = 0; // Control pin 2 for left motor (m1)
+const int PWM2 = 6; // Control pwm for right motor (m2)
+const int IN3 = 2; // Control pin 1 for right motor (m2)
+const int IN4 = 3; // Control pin 2 for right motor (m2)
 
-// PID constants
-float Kp = 25.0; // Proportional gain
-float Ki = 0.0;  // Integral gain (Start with 0, adjust if needed)
-float Kd = 15.0; // Derivative gain
+// Variables to store the min, max, and threshold values for each IR sensor
+int minA0, maxA0, thresholdA0;
+int minA1, maxA1, thresholdA1;
+int minA2, maxA2, thresholdA2;
+int minA3, maxA3, thresholdA3;
+int minA4, maxA4, thresholdA4;
+int minA5, maxA5, thresholdA5;
+int minA6, maxA6, thresholdA6;
+int minA7, maxA7, thresholdA7;
 
-// Speed control
-int baseSpeed = 150;  // Base speed of the motors
-float error = 0;
-float previousError = 0;
-float integral = 0;
-int maxSpeed = 255;  // Maximum PWM value
+int valueA0, valueA1, valueA2, valueA3, valueA4, valueA5, valueA6, valueA7;
+int CV0, CV1, CV2, CV3, CV4, CV5, CV6, CV7;
+
+// Variable to calculate the error
+long error = 0;
+
+int speedvalue = 200;
+int Ldown = 0;
+int Rdown = 0;
+int Rerror = 0;
+int Lerror = 0;
+
+int m1;
+int m2;
 
 void setup() {
-  // Set motor pins as output
-  pinMode(motorA1, OUTPUT);
-  pinMode(motorA2, OUTPUT);
-  pinMode(motorB1, OUTPUT);
-  pinMode(motorB2, OUTPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(ENB, OUTPUT);
+  Serial.begin(115200);
+  pinMode(PWM1, OUTPUT);
+  pinMode(PWM2, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
-  // Set IR sensor pins as input
-  pinMode(ir1, INPUT);
-  pinMode(ir2, INPUT);
-  pinMode(ir3, INPUT);
-  pinMode(ir4, INPUT);
-  pinMode(ir5, INPUT);
-}
+  calibrateir();       // Calibrate IR sensors  
+  }
 
 void loop() {
-  // Read sensor values
-  int s1 = digitalRead(ir1);  // Leftmost sensor
-  int s2 = digitalRead(ir2);
-  int s3 = digitalRead(ir3);  // Center sensor
-  int s4 = digitalRead(ir4);
-  int s5 = digitalRead(ir5);  // Rightmost sensor
+  // Call the function to read and assign analog values
+  readir();
+  Serial.print("error: ");
+  Serial.println(error);
+  delay(500);
 
-  // Calculate error based on sensor values
-  error = calculateError(s1, s2, s3, s4, s5);
-
-  // Calculate PID values
-  float proportional = error;
-  integral += error;  // Accumulate the integral term
-  float derivative = error - previousError;
-  previousError = error;
-
-  // PID output
-  float PIDvalue = (Kp * proportional) + (Ki * integral) + (Kd * derivative);
-
-  // Adjust motor speeds based on the PID value
-  int leftSpeed = constrain(baseSpeed + PIDvalue, 0, maxSpeed);
-  int rightSpeed = constrain(baseSpeed - PIDvalue, 0, maxSpeed);
-
-  // Move the motors with the calculated speeds
-  moveMotors(leftSpeed, rightSpeed);
-}
-
-float calculateError(int s1, int s2, int s3, int s4, int s5) {
-  // Assign weights to sensors
-  int weights[5] = {-2, -1, 0, 1, 2};  // Negative means left, positive means right
-
-  // Calculate weighted average error
-  float weightedSum = (s1 * weights[0]) + (s2 * weights[1]) + (s3 * weights[2]) + (s4 * weights[3]) + (s5 * weights[4]);
-  float totalActiveSensors = s1 + s2 + s3 + s4 + s5;
-
-  // If no sensor detects the line, return previous error (keep going with the previous direction)
-  if (totalActiveSensors == 0) {
-    return previousError;
+ 
+  if (error > 0) {
+    int Rerror = error;
+    int Rdown = map(Rerror, 0, 20000, 0, 200);
+    int m1 = 200;
+    int m2 = 200 - Rdown;
+    Serial.print(m1);
+    Serial.print('\t');
+    Serial.print(m2);
+    Serial.print('\t');
+    Serial.println(Rdown);
+    
+  }else{
+    int Lerror = error*-1;
+    int Ldown = map(Lerror, 0, 20000, 0, 200);
+    int m1 = 200 - Ldown;
+    int m2 = 200;
+    Serial.print(m1);
+    Serial.print('\t');
+    Serial.print(m2);
+    Serial.print('\t');
+    Serial.println(Ldown);
   }
 
-  // Calculate the actual error
-  float error = weightedSum / totalActiveSensors;
-  return error;
-}
 
-void moveMotors(int leftSpeed, int rightSpeed) {
-  // Move left motor
-  if (leftSpeed > 0) {
-    digitalWrite(motorA1, HIGH);
-    digitalWrite(motorA2, LOW);
-    analogWrite(ENA, leftSpeed);
-  } else {
-    digitalWrite(motorA1, LOW);
-    digitalWrite(motorA2, HIGH);
-    analogWrite(ENA, -leftSpeed);
-  }
-
-  // Move right motor
-  if (rightSpeed > 0) {
-    digitalWrite(motorB1, HIGH);
-    digitalWrite(motorB2, LOW);
-    analogWrite(ENB, rightSpeed);
-  } else {
-    digitalWrite(motorB1, LOW);
-    digitalWrite(motorB2, HIGH);
-    analogWrite(ENB, -rightSpeed);
-  }
+  mdrive(m1, m2);
 }
